@@ -16,8 +16,6 @@ export default class ParallelTransactionRunner {
             rollbackAllIfAnyFailed?: boolean;
         }
     ): Promise<R extends void ? void : R[]> {
-        const queryRunners: ProxyQueryRunner[] = [];
-
         if (options?.maxConnection && options.maxConnection < values.length) {
             const valuesList = this.sliceArray(values, options.maxConnection);
             let rs: any = [];
@@ -30,25 +28,24 @@ export default class ParallelTransactionRunner {
             return rs;
         }
 
-        const results = await Promise.allSettled(
-            values.map(async (value) => {
-                const queryRunner = new ProxyQueryRunner(this.dataSource.createQueryRunner());
-                queryRunners.push(queryRunner);
-                await queryRunner.connect();
-                await queryRunner.startTransaction();
+        const queryRunners: ProxyQueryRunner[] = [];
 
-                try {
-                    const returnValue = await func(value, queryRunner.queryRunner);
-                    return returnValue as R;
-                } catch (e) {
-                    queryRunner.isFailure = true;
-                    return Promise.reject(e);
-                }
-            })
-        );
+        const results = await Promise.allSettled(values.map(async (value: T) => {
+            const queryRunner = new ProxyQueryRunner(this.dataSource.createQueryRunner());
+            queryRunners.push(queryRunner);
+            await queryRunner.connect();
+            await queryRunner.startTransaction();
+
+            try {
+                const returnValue = await func(value, queryRunner.queryRunner);
+                return returnValue as R;
+            } catch (e) {
+                queryRunner.isFailure = true;
+                return Promise.reject(e);
+            }
+        }));
 
         const rejects = results.filter((result) => result.status === 'rejected');
-
         if (rejects.length) {
             const errors: Error[] = rejects.map((reject) => (reject as PromiseRejectedResult).reason);
             console.error(errors);
