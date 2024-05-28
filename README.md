@@ -11,12 +11,12 @@ const dataSource = new DataSource({...});
 const parallelTransactionManager = new ParallelTransactionRunner(dataSource);
 
 // Initialize an array of items to process (e.g., [1, 2, 3, 4])
-const foo: Foo[] = [...];
+const foos: Foo[] = [...];
 
 // Run transactions in parallel and collect the results
-const bars = await parallelTransactionManager.run(foo, async (item: T, queryRunner: QueryRunner) => {
-    // Perform tasks on each item (e.g., save to the database)
-    const bar = new Bar();
+const bars = await parallelTransactionManager.run(foos, async (foo: Foo, queryRunner: QueryRunner) => {
+    // Perform tasks on each item (e.g., create a new Bar instance and save to the database)
+    const bar = new Bar(foo);
     await queryRunner.manager.save(Bar, bar);
     return bar; // Return the result
 });
