@@ -17,7 +17,6 @@ describe('test', () => {
         parallelTransactionRunner = new ParallelTransactionRunner(dataSource);
     })
 
-
     it('all insert', async () => {
         const size = 5;
         const results = await parallelTransactionRunner.run(new Array(size).fill(null), async (_, queryRunner) => {
