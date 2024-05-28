@@ -1,6 +1,6 @@
 {
   "name": "typeorm-parallel-transaction-runner",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Library that can obtain multiple connections and execute queries in parallel.",
   "main": "dist/cjs/index.js",
   "repository": "git@github.com:hypernova1/typeorm-parallel-transaction-runner.git",
