@@ -1,4 +1,5 @@
 import { QueryRunner } from 'typeorm';
+import {IsolationLevel} from "typeorm/driver/types/IsolationLevel";
 
 export default class ProxyQueryRunner {
     isFailure: boolean;
@@ -17,8 +18,8 @@ export default class ProxyQueryRunner {
         return this.queryRunner.release();
     }
 
-    startTransaction() {
-        return this.queryRunner.startTransaction();
+    startTransaction(isolationLevel?: IsolationLevel) {
+        return this.queryRunner.startTransaction(isolationLevel);
     }
 
     rollbackTransaction() {
