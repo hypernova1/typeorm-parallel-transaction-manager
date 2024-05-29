@@ -1,7 +1,7 @@
 import { DataSource, QueryRunner } from 'typeorm';
 import ProxyQueryRunner from "./proxy-query-runner";
 
-export default class ParallelTransactionRunner {
+export default class ParallelTransactionManager {
     readonly dataSource: DataSource;
 
     constructor(dataSource: DataSource) {

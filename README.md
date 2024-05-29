@@ -1,4 +1,4 @@
-# TypeORM Parallel Transaction Runner
+# TypeORM Parallel Transaction Manager
 This is a library that can obtain multiple connections and execute queries in parallel.
 
 How to use
@@ -7,8 +7,8 @@ How to use
 // Initialize TypeORM DataSource
 const dataSource = new DataSource({...});
 
-// Initialize an instance of ParallelTransactionRunner
-const parallelTransactionManager = new ParallelTransactionRunner(dataSource);
+// Initialize an instance of ParallelTransactionManager
+const parallelTransactionManager = new ParallelTransactionManager(dataSource);
 
 // Initialize an array of items to process (e.g., [1, 2, 3, 4])
 const foos: Foo[] = [...];
