@@ -8,6 +8,14 @@ export default class ParallelTransactionRunner {
         this.dataSource = dataSource;
     }
 
+    /**
+     * 병렬 트랜잭션을 시작한다.
+     *
+     * @param values
+     * @param func
+     * @param options
+     * @return 처리 결과
+     * */
     async run<T, R>(
         values: T[],
         func: (t: T, queryRunner: QueryRunner) => R | Promise<R>,
@@ -30,20 +38,7 @@ export default class ParallelTransactionRunner {
 
         const queryRunners: ProxyQueryRunner[] = [];
 
-        const results = await Promise.allSettled(values.map(async (value: T) => {
-            const queryRunner = new ProxyQueryRunner(this.dataSource.createQueryRunner());
-            queryRunners.push(queryRunner);
-            await queryRunner.connect();
-            await queryRunner.startTransaction();
-
-            try {
-                const returnValue = await func(value, queryRunner.queryRunner);
-                return returnValue as R;
-            } catch (e) {
-                queryRunner.isFailure = true;
-                return Promise.reject(e);
-            }
-        }));
+        const results = await this.executeQueries(values, queryRunners, func);
 
         const rejects = results.filter((result) => result.status === 'rejected');
         if (rejects.length) {
@@ -65,6 +60,36 @@ export default class ParallelTransactionRunner {
             : R[];
     }
 
+    /**
+     * 쿼리를 실행한 후 결과를 받아온다.
+     *
+     * @param values
+     * @param queryRunners
+     * @param func
+     * */
+    private async executeQueries<T, R>(values: T[], queryRunners: ProxyQueryRunner[], func: (t: T, queryRunner: QueryRunner) => (Promise<R> | R)) {
+        return Promise.allSettled(values.map(async (value: T) => {
+            const queryRunner = new ProxyQueryRunner(this.dataSource.createQueryRunner());
+            queryRunners.push(queryRunner);
+            await queryRunner.connect();
+            await queryRunner.startTransaction();
+
+            try {
+                const returnValue = await func(value, queryRunner.queryRunner);
+                return returnValue as R;
+            } catch (e) {
+                queryRunner.isFailure = true;
+                return Promise.reject(e);
+            }
+        }));
+    }
+
+    /**
+     * 실패한 커넥션을 필터링한다.
+     *
+     * @param queryRunners
+     * @return 실패한 커넥션
+     * */
     private filterFailureQueryRunner(queryRunners: ProxyQueryRunner[]) {
         const failureQueryRunners: ProxyQueryRunner[] = [];
         for (let i = queryRunners.length - 1; i >= 0; i--) {
@@ -76,6 +101,11 @@ export default class ParallelTransactionRunner {
         return failureQueryRunners;
     }
 
+    /**
+     * 트랜잭션 목록을 롤백 후 커넥션을 반납한다.
+     *
+     * @param failureQueryRunners 실패한 커넥션 목록
+     * */
     private async rollbackAll(failureQueryRunners: ProxyQueryRunner[]) {
         for (const failureQueryRunner of failureQueryRunners) {
             await failureQueryRunner.rollbackTransaction();
@@ -83,6 +113,11 @@ export default class ParallelTransactionRunner {
         }
     }
 
+    /**
+     * 트랜잭션 목록을 커밋한 후 커넥션을 반납한다.
+     *
+     * @param queryRunners 커밋할 커넥션 목록
+     * */
     private async commitAll(queryRunners: ProxyQueryRunner[]) {
         for (const queryRunner of queryRunners) {
             await queryRunner.commitTransaction();
@@ -90,6 +125,13 @@ export default class ParallelTransactionRunner {
         }
     }
 
+    /**
+     * 배열을 사이즈만큼 다시 잘라낸 후 반환한다.
+     *
+     * @param array 잘라낼 배열
+     * @param size 잘라낼 사이즈
+     * @return 잘라낸 배열 목록
+     * */
     private sliceArray<T>(array: T[], size: number): T[][] {
         const slicedArray = [];
         let index = 0;
