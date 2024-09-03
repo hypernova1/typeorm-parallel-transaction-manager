@@ -34,11 +34,6 @@ export default class ParallelTransactionManager {
         let results: PromiseSettledResult<any>[] = [];
         let successQueryRunners: ProxyQueryRunner[] = [];
         for (const vs of valuesList) {
-            try {
-
-            } catch (e) {
-
-            }
             const { results: rs, queryRunners } = await this.execute(vs, func, {
                 isolationLevel: options?.isolationLevel,
             });
@@ -51,7 +46,6 @@ export default class ParallelTransactionManager {
                 throw errors[0];
             }
 
-
             results = results.concat(rs);
             successQueryRunners = successQueryRunners.concat(queryRunners);
         }
@@ -63,6 +57,14 @@ export default class ParallelTransactionManager {
             : R[];
     }
 
+    /**
+     * 쿼리를 실행한후 쿼리 러너와 결과를 모두 반환한다.
+     *
+     * @param values 함수의 각 사이클마다 인자로 받을 데이터의 배열
+     * @param func 실행할 함수
+     * @param options 옵션
+     * @return 쿼리 러너 및 처리 결과
+     * */
     private async execute<T, R>(values: T[], func: (t: T, queryRunner: QueryRunner) => (Promise<R> | R), options?: {
         maxConnection?: number;
         rollbackAllIfAnyFailed?: boolean;
