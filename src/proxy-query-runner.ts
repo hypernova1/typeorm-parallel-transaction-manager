@@ -1,6 +1,9 @@
 import { QueryRunner } from 'typeorm';
 import {IsolationLevel} from "typeorm/driver/types/IsolationLevel";
 
+/**
+ * 쿼리러너 프록시 클래스
+ * */
 export default class ProxyQueryRunner {
     isFailure: boolean;
     queryRunner: QueryRunner;

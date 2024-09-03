@@ -1,6 +1,6 @@
 import { DataSource, QueryRunner } from 'typeorm';
 import ProxyQueryRunner from "./proxy-query-runner";
-import {IsolationLevel} from "typeorm/driver/types/IsolationLevel";
+import { IsolationLevel } from "typeorm/driver/types/IsolationLevel";
 
 export default class ParallelTransactionManager {
     readonly dataSource: DataSource;
@@ -12,9 +12,9 @@ export default class ParallelTransactionManager {
     /**
      * 병렬 트랜잭션을 시작한다.
      *
-     * @param values
-     * @param func
-     * @param options
+     * @param values 함수의 각 사이클마다 인자로 받을 데이터의 배열
+     * @param func 실행할 함수
+     * @param options 옵션
      * @return 처리 결과
      * */
     async run<T, R>(
@@ -22,27 +22,79 @@ export default class ParallelTransactionManager {
         func: (t: T, queryRunner: QueryRunner) => R | Promise<R>,
         options?: {
             maxConnection?: number;
-            rollbackAllIfAnyFailed?: boolean;
             isolationLevel?: IsolationLevel;
             errorCallback?: (e: any) => void;
         }
     ): Promise<R extends void ? void : R[]> {
+        let valuesList: T[][] = [values]
         if (options?.maxConnection && options.maxConnection < values.length) {
-            const valuesList = this.sliceArray(values, options.maxConnection);
-            let rs: any = [];
-            for (const vs of valuesList) {
-                const r = await this.run(vs, func, {
-                    rollbackAllIfAnyFailed: options?.rollbackAllIfAnyFailed,
-                    isolationLevel: options?.isolationLevel,
-                });
-                rs = rs.concat(r);
-            }
-            return rs;
+            valuesList = this.sliceArray(values, options.maxConnection);
         }
 
+        let results: PromiseSettledResult<any>[] = [];
+        let successQueryRunners: ProxyQueryRunner[] = [];
+        for (const vs of valuesList) {
+            try {
+
+            } catch (e) {
+
+            }
+            const { results: rs, queryRunners } = await this.execute(vs, func, {
+                isolationLevel: options?.isolationLevel,
+            });
+
+            const rejects = rs.filter((result) => result.status === 'rejected');
+            if (rejects.length) {
+                const errors: Error[] = rejects.map((reject) => (reject as PromiseRejectedResult).reason);
+                const failureQueryRunners = this.filterFailureQueryRunner(queryRunners);
+                await this.rollbackAll(failureQueryRunners);
+                throw errors[0];
+            }
+
+
+            results = results.concat(rs);
+            successQueryRunners = successQueryRunners.concat(queryRunners);
+        }
+
+        await this.commitAll(successQueryRunners);
+
+        return results.filter((result) => result.status === 'fulfilled').map((result: any) => result.value as R) as R extends void
+            ? void
+            : R[];
+    }
+
+    private async execute<T, R>(values: T[], func: (t: T, queryRunner: QueryRunner) => (Promise<R> | R), options?: {
+        maxConnection?: number;
+        rollbackAllIfAnyFailed?: boolean;
+        isolationLevel?: IsolationLevel;
+        errorCallback?: ((e: any) => void)
+    }) {
         const queryRunners: ProxyQueryRunner[] = [];
 
-        const results = await Promise.allSettled(values.map(async (value: T) => {
+        const results = await this.executeQueries(values, queryRunners, func, options);
+
+        return {
+            queryRunners,
+            results
+        }
+    }
+
+    /**
+     * 쿼리를 실행한 후 결과를 받아온다.
+     *
+     * @param values 함수의 각 사이클마다 인자로 받을 데이터의 배열
+     * @param queryRunners 커넥션 목록
+     * @param func 실행할 함수
+     * @param options 옵션
+     * @return 처리 결과
+     * */
+    private async executeQueries<T, R>(values: T[], queryRunners: ProxyQueryRunner[], func: (t: T, queryRunner: QueryRunner) => (Promise<R> | R), options?: {
+        maxConnection?: number;
+        rollbackAllIfAnyFailed?: boolean;
+        isolationLevel?: IsolationLevel;
+        errorCallback?: (e: any) => void
+    }) {
+        return Promise.allSettled(values.map(async (value: T) => {
             const queryRunner = new ProxyQueryRunner(this.dataSource.createQueryRunner());
             queryRunners.push(queryRunner);
             await queryRunner.connect();
@@ -58,49 +110,6 @@ export default class ParallelTransactionManager {
                 } else {
                     return Promise.reject(e);
                 }
-            }
-        }));
-
-        const rejects = results.filter((result) => result.status === 'rejected');
-        if (rejects.length) {
-            const errors: Error[] = rejects.map((reject) => (reject as PromiseRejectedResult).reason);
-            console.error(errors);
-            if (!options?.rollbackAllIfAnyFailed) {
-                await this.rollbackAll(queryRunners);
-                throw errors;
-            }
-
-            const failureQueryRunners = this.filterFailureQueryRunner(queryRunners);
-            await this.rollbackAll(failureQueryRunners);
-        }
-
-        await this.commitAll(queryRunners);
-
-        return results.filter((result) => result.status === 'fulfilled').map((result: any) => result.value as R) as R extends void
-            ? void
-            : R[];
-    }
-
-    /**
-     * 쿼리를 실행한 후 결과를 받아온다.
-     *
-     * @param values
-     * @param queryRunners
-     * @param func
-     * */
-    private async executeQueries<T, R>(values: T[], queryRunners: ProxyQueryRunner[], func: (t: T, queryRunner: QueryRunner) => (Promise<R> | R)) {
-        return Promise.allSettled(values.map(async (value: T) => {
-            const queryRunner = new ProxyQueryRunner(this.dataSource.createQueryRunner());
-            queryRunners.push(queryRunner);
-            await queryRunner.connect();
-            await queryRunner.startTransaction();
-
-            try {
-                const returnValue = await func(value, queryRunner.queryRunner);
-                return returnValue as R;
-            } catch (e) {
-                queryRunner.isFailure = true;
-                return Promise.reject(e);
             }
         }));
     }

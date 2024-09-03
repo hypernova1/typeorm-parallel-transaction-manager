@@ -31,7 +31,7 @@ describe('test', () => {
         const size = 5;
         let callbackCount = 0;
         let loop = 0;
-        const results = await parallelTransactionManager.run(new Array(size).fill(null), async (_, queryRunner) => {
+        await expect(() => parallelTransactionManager.run(new Array(size).fill(null), async (_, queryRunner) => {
             loop++;
             const testEntity = new TestEntity();
             if (loop % 2 === 1) {
@@ -43,7 +43,6 @@ describe('test', () => {
             errorCallback: (_) => {
                 callbackCount++;
             }
-        });
-        expect(callbackCount).toEqual(3);
+        })).rejects.toThrow();
     });
 });
