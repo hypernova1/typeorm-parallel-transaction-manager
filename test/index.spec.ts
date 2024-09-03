@@ -1,10 +1,10 @@
-import ParallelTransactionRunner from "../src";
-import { DataSource } from "typeorm";
+import ParallelTransactionManager from "../src";
+import {DataSource} from "typeorm";
 import TestEntity from './entity/test-entity';
 
 
 describe('test', () => {
-    let parallelTransactionRunner: ParallelTransactionRunner;
+    let parallelTransactionManager: ParallelTransactionManager;
     beforeAll(async () => {
         const dataSource = new DataSource({
             type: "sqlite",
@@ -14,16 +14,36 @@ describe('test', () => {
             entities: [TestEntity],
         });
         await dataSource.initialize();
-        parallelTransactionRunner = new ParallelTransactionRunner(dataSource);
+        parallelTransactionManager = new ParallelTransactionManager(dataSource);
     })
 
-    it('all insert', async () => {
+    it('insert all', async () => {
         const size = 5;
-        const results = await parallelTransactionRunner.run(new Array(size).fill(null), async (_, queryRunner) => {
+        const results = await parallelTransactionManager.run(new Array(size).fill(null), async (_, queryRunner) => {
             const testEntity = new TestEntity();
             testEntity.name = "test";
             return queryRunner.manager.save(TestEntity, testEntity);
         });
         expect(results.length).toEqual(size);
-    })
+    });
+
+    it('error callback', async () => {
+        const size = 5;
+        let callbackCount = 0;
+        let loop = 0;
+        const results = await parallelTransactionManager.run(new Array(size).fill(null), async (_, queryRunner) => {
+            loop++;
+            const testEntity = new TestEntity();
+            if (loop % 2 === 1) {
+                throw new Error('error')
+            }
+            testEntity.name = "test";
+            return queryRunner.manager.save(TestEntity, testEntity);
+        }, {
+            errorCallback: (_) => {
+                callbackCount++;
+            }
+        });
+        expect(callbackCount).toEqual(3);
+    });
 });

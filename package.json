@@ -1,9 +1,9 @@
 {
-  "name": "typeorm-parallel-transaction-runner",
+  "name": "typeorm-parallel-transaction-manager",
   "version": "0.0.1",
   "description": "Library that can obtain multiple connections and execute queries in parallel.",
   "main": "dist/cjs/index.js",
-  "repository": "git@github.com:hypernova1/typeorm-parallel-transaction-runner.git",
+  "repository": "git@github.com:hypernova1/typeorm-parallel-transaction-manager.git",
   "type": "module",
   "author": "hypernova1",
   "license": "MIT",

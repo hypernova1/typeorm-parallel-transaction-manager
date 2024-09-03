@@ -1,7 +1,8 @@
 import { DataSource, QueryRunner } from 'typeorm';
 import ProxyQueryRunner from "./proxy-query-runner";
+import {IsolationLevel} from "typeorm/driver/types/IsolationLevel";
 
-export default class ParallelTransactionRunner {
+export default class ParallelTransactionManager {
     readonly dataSource: DataSource;
 
     constructor(dataSource: DataSource) {
@@ -22,6 +23,8 @@ export default class ParallelTransactionRunner {
         options?: {
             maxConnection?: number;
             rollbackAllIfAnyFailed?: boolean;
+            isolationLevel?: IsolationLevel;
+            errorCallback?: (e: any) => void;
         }
     ): Promise<R extends void ? void : R[]> {
         if (options?.maxConnection && options.maxConnection < values.length) {
@@ -30,6 +33,7 @@ export default class ParallelTransactionRunner {
             for (const vs of valuesList) {
                 const r = await this.run(vs, func, {
                     rollbackAllIfAnyFailed: options?.rollbackAllIfAnyFailed,
+                    isolationLevel: options?.isolationLevel,
                 });
                 rs = rs.concat(r);
             }
@@ -38,7 +42,24 @@ export default class ParallelTransactionRunner {
 
         const queryRunners: ProxyQueryRunner[] = [];
 
-        const results = await this.executeQueries(values, queryRunners, func);
+        const results = await Promise.allSettled(values.map(async (value: T) => {
+            const queryRunner = new ProxyQueryRunner(this.dataSource.createQueryRunner());
+            queryRunners.push(queryRunner);
+            await queryRunner.connect();
+            await queryRunner.startTransaction(options?.isolationLevel);
+
+            try {
+                const returnValue = await func(value, queryRunner.queryRunner);
+                return returnValue as R;
+            } catch (e) {
+                queryRunner.isFailure = true;
+                if (options?.errorCallback) {
+                    options.errorCallback(e);
+                } else {
+                    return Promise.reject(e);
+                }
+            }
+        }));
 
         const rejects = results.filter((result) => result.status === 'rejected');
         if (rejects.length) {
