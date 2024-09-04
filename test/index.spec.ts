@@ -1,16 +1,20 @@
 import ParallelTransactionManager from "../src";
 import { DataSource } from "typeorm";
 import TestEntity from './entity/test-entity';
+import ProxyQueryRunner from '../src/proxy-query-runner';
 
 
 describe('test', () => {
     let parallelTransactionManager: ParallelTransactionManager;
 
     const dataSource = new DataSource({
-        type: "sqlite",
-        database: ':memory:',
+        type: "mysql",
+        database: 'test',
+        host: 'localhost',
+        username: 'root',
+        password: '1111',
         synchronize: true,
-        logging: true,
+        logging: false,
         entities: [TestEntity],
     });
     parallelTransactionManager = new ParallelTransactionManager(dataSource);
@@ -18,15 +22,37 @@ describe('test', () => {
         await dataSource.initialize();
     })
 
-    afterEach(async () => {
+    beforeEach(async () => {
         const queryRunner = dataSource.createQueryRunner();
         try {
             await queryRunner.connect();
-            await queryRunner.query('DELETE FROM test_entity');
+            await queryRunner.query('DELETE FROM test_entity WHERE id > 0');
+        } catch (e) {
+            console.error(e);
         } finally {
             await queryRunner.release();
         }
+    });
+
+    afterAll(async () => {
+        await dataSource.destroy();
     })
+
+    it('test parallel transaction', async () => {
+        const queryRunners: ProxyQueryRunner[] = [];
+        for (let i = 0; i < 5; i++) {
+            const queryRunner = dataSource.createQueryRunner();
+            queryRunners.push(new ProxyQueryRunner(queryRunner));
+        }
+
+        await Promise.allSettled(queryRunners.map(async (queryRunner: ProxyQueryRunner) => {
+            await queryRunner.connect();
+            await queryRunner.startTransaction();
+            await queryRunner.queryRunner.manager.query('INSERT INTO test_entity(name) VALUES ("hello")');
+            await queryRunner.commitTransaction();
+            await queryRunner.release();
+        }));
+    });
 
     it('insert all', async () => {
         const size = 5;
