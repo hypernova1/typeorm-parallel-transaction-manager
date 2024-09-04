@@ -19,7 +19,7 @@ export default class ParallelTransactionManager {
      * */
     async run<T, R>(
         values: T[],
-        func: (t: T, queryRunner: QueryRunner) => R | Promise<R>,
+        func: (t: T, queryRunner: QueryRunner) => Promise<R>,
         options?: {
             maxConnection?: number;
             isolationLevel?: IsolationLevel;
@@ -34,11 +34,11 @@ export default class ParallelTransactionManager {
         let results: PromiseSettledResult<any>[] = [];
         let successQueryRunners: ProxyQueryRunner[] = [];
         for (const vs of valuesList) {
-            const { results: rs, queryRunners } = await this.execute(vs, func, {
+            const { resultPromiseAllSettles, queryRunners } = await this.execute(vs, func, {
                 isolationLevel: options?.isolationLevel,
             });
 
-            const rejects = rs.filter((result) => result.status === 'rejected');
+            const rejects = resultPromiseAllSettles.filter((result) => result.status === 'rejected');
             if (rejects.length) {
                 const errors: Error[] = rejects.map((reject) => (reject as PromiseRejectedResult).reason);
                 const failureQueryRunners = this.filterFailureQueryRunner(queryRunners);
@@ -46,7 +46,7 @@ export default class ParallelTransactionManager {
                 throw errors[0];
             }
 
-            results = results.concat(rs);
+            results = results.concat(resultPromiseAllSettles);
             successQueryRunners = successQueryRunners.concat(queryRunners);
         }
 
@@ -73,11 +73,11 @@ export default class ParallelTransactionManager {
     }) {
         const queryRunners: ProxyQueryRunner[] = [];
 
-        const results = await this.executeQueries(values, queryRunners, func, options);
+        const resultPromiseAllSettles = await this.executeQueries(values, queryRunners, func, options);
 
         return {
             queryRunners,
-            results
+            resultPromiseAllSettles
         }
     }
 
@@ -103,8 +103,7 @@ export default class ParallelTransactionManager {
             await queryRunner.startTransaction(options?.isolationLevel);
 
             try {
-                const returnValue = await func(value, queryRunner.queryRunner);
-                return returnValue as R;
+                return await func(value, queryRunner.queryRunner);
             } catch (e) {
                 queryRunner.isFailure = true;
                 if (options?.errorCallback) {

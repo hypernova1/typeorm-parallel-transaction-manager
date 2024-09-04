@@ -1,20 +1,31 @@
 import ParallelTransactionManager from "../src";
-import {DataSource} from "typeorm";
+import { DataSource } from "typeorm";
 import TestEntity from './entity/test-entity';
 
 
 describe('test', () => {
     let parallelTransactionManager: ParallelTransactionManager;
+
+    const dataSource = new DataSource({
+        type: "sqlite",
+        database: ':memory:',
+        synchronize: true,
+        logging: true,
+        entities: [TestEntity],
+    });
+    parallelTransactionManager = new ParallelTransactionManager(dataSource);
     beforeAll(async () => {
-        const dataSource = new DataSource({
-            type: "sqlite",
-            database: ':memory:',
-            synchronize: true,
-            logging: false,
-            entities: [TestEntity],
-        });
         await dataSource.initialize();
-        parallelTransactionManager = new ParallelTransactionManager(dataSource);
+    })
+
+    afterEach(async () => {
+        const queryRunner = dataSource.createQueryRunner();
+        try {
+            await queryRunner.connect();
+            await queryRunner.query('DELETE FROM test_entity');
+        } finally {
+            await queryRunner.release();
+        }
     })
 
     it('insert all', async () => {
@@ -44,5 +55,7 @@ describe('test', () => {
                 callbackCount++;
             }
         })).rejects.toThrow();
+        const savedEntities = await dataSource.manager.find(TestEntity)
+        expect(savedEntities.length).toEqual(0);
     });
 });
